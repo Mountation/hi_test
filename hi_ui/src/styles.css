@@ -1,0 +1,42 @@
+body { 
+	font-family: 'Segoe UI', 'Inter', Arial, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0; 
+	background: radial-gradient(circle at 20% 20%, #001529 0%, #000c17 60%, #02142a 100%);
+	color: #d6e4ff;
+	min-height:100vh;
+}
+* { box-sizing: border-box; }
+::-webkit-scrollbar { width:8px; height:8px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.06); }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg,#1677ff,#531dab); border-radius:4px; }
+.ant-table { background: transparent !important; }
+.ant-table-cell { background: transparent !important; }
+.fade-in { animation: fadeIn .6s ease; }
+@keyframes fadeIn { from { opacity:0; transform: translateY(8px);} to { opacity:1; transform: translateY(0);} }
+
+/* lightweight card and skeleton styles for faster perceived loading */
+.card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.04); border-radius: 6px; }
+.skeleton { display: inline-block; height: 14px; background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.08), rgba(255,255,255,0.04)); border-radius: 4px; animation: skeleton-shimmer 1.2s linear infinite; }
+@keyframes skeleton-shimmer { 0% { background-position: -200px 0; } 100% { background-position: 200px 0; } }
+/* error banner */
+.error-banner { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background: rgba(255,80,80,0.08); border:1px solid rgba(255,80,80,0.12); border-radius:6px; color:#ffb3b3; }
+.error-content { flex:1; margin-right:8px; }
+.close-btn { background:transparent; border:0; color:#ffd6d6; font-size:18px; cursor:pointer; padding:4px 8px; }
+.close-btn:hover { color:#fff; }
+
+/* shared page layout helpers */
+.page-container { padding: 16px; }
+.page-card { margin-bottom: 12px; }
+.form-inline { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.muted-note { margin-top:12px; font-size:12px; color:#999; }
+.flex-between { display:flex; width:100%; justify-content:space-between; align-items:center; }
+.compact-button { padding: 4px 10px; }
+.list-margin { margin-top:16px; }
+.form-max { max-width: 720px; }
+.input-number { width: 120px; }
+.result-card { background: #fafafa; margin-top: 12px; }
+.collapse-margin { margin-top: 8px; }
+.flex-item { flex: 1 1 200px; }
+.flex-item-small { flex: 1 1 120px; }
+.search-max { max-width: 480px; }

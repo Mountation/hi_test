@@ -1,0 +1,6 @@
+agent_base_url: "http://agent-runtime-aicustomerservice-test.xyftest.hisense.com/v1/"
+agent_api_key: "app-l2u7WHOfPjpdqWx87LYOBFPE"
+scoring_base_url: "https://inner-apisix-test.hisense.com/histaragent-test/v1/chat-messages?user_key=jdzqqy7jdzbmtaqpqvunvmnncepptwfd"
+scoring_api_key: "app-HQomYXN0PdyDjF7LQ5dDnojY"
+default_user_phone: "11111111111"
+default_hotline_phone: "43001"

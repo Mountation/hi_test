@@ -1,0 +1,8 @@
+# 日志库
+loguru>=0.7.0
+fastapi>=0.95.0
+uvicorn[standard]>=0.20.0
+pydantic>=1.10.0
+sqlalchemy>=2.0.20
+pymysql>=1.0.3
+openpyxl>=3.1.2
