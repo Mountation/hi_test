@@ -40,3 +40,13 @@ body {
 .flex-item { flex: 1 1 200px; }
 .flex-item-small { flex: 1 1 120px; }
 .search-max { max-width: 480px; }
+
+/* make the import hint clearly visible on the dark themed background */
+.import-alert {
+	background: linear-gradient(90deg, rgba(24,144,255,0.12), rgba(24,144,255,0.08));
+	border: 1px solid rgba(24,144,255,0.22) !important;
+	color: #e6f7ff !important;
+}
+.import-alert .ant-typography {
+	color: #e6f7ff !important;
+}

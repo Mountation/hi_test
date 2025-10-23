@@ -1,0 +1,12 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:x='urn:schemas-microsoft-com:office:excel'>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+</head>
+<body>
+<table>
+  <tr><th>content</th><th>expected</th><th>intent</th></tr>
+  <tr><td>今天天气怎么样</td><td>晴</td><td>查询天气</td></tr>
+  <tr><td>帮我订个外卖</td><td></td><td>订餐</td></tr>
+</table>
+</body>
+</html>
