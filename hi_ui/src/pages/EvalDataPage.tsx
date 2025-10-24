@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import '../styles/hover.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { EvalData } from '../types';
 import ErrorBanner from '../components/ErrorBanner';
 import { message, Popconfirm, Button, Table, Form, Input, Space, Alert, Modal, InputNumber, Pagination, Tooltip, Card, Typography, Skeleton, Dropdown, Menu } from 'antd';
-import { EditOutlined, DeleteOutlined, ArrowLeftOutlined, MoreOutlined } from '@ant-design/icons';
+import { EditOutlined, DeleteOutlined, ArrowLeftOutlined, MoreOutlined, GlobalOutlined } from '@ant-design/icons';
 
 const EvalDataPage: React.FC = () => {
   const { id } = useParams();
@@ -21,34 +22,29 @@ const EvalDataPage: React.FC = () => {
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [serverQuery, setServerQuery] = useState<string | undefined>(undefined);
+  const [globalSearch, setGlobalSearch] = useState(false);
   const [evalSetName, setEvalSetName] = useState<string | null>(null);
   const navigate = useNavigate();
   const [showBack, setShowBack] = useState(false);
   const [jumpPage, setJumpPage] = useState<number | null>(null);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const load = async () => {
+  const load = async (q?: string, global?: boolean) => {
     try {
-      const res = await api.listEvalData(setId, currentPage, pageSize);
+      const res = await api.listEvalData(setId, currentPage, pageSize, q, global);
       setData(res?.items || []);
-      // update total for pagination
-      // AntD Table reads total from pagination prop (we keep local state)
-      // store total in a ref-like state via setTotal
       setTotal(res?.total || 0);
     } catch (e: any) {
       setError(String(e?.message || e || '加载失败'));
     }
   };
 
-  // client-side filtered data for search UX
-  const filteredData = data.filter(d => {
-    if (!searchQuery) return true;
-    const q = searchQuery.trim().toLowerCase();
-    return String(d.content || '').toLowerCase().includes(q) || String(d.intent || '').toLowerCase().includes(q) || String(d.expected || '').toLowerCase().includes(q);
-  });
+  // server-side data in `data`
+  const filteredData = data;
 
   // Reload when setId, current page or page size changes
-  useEffect(() => { if (setId) load(); }, [setId, currentPage, pageSize]);
+  useEffect(() => { if (setId) load(serverQuery, globalSearch); }, [setId, currentPage, pageSize, serverQuery, globalSearch]);
 
   useEffect(() => {
     let mounted = true;
@@ -123,7 +119,7 @@ const EvalDataPage: React.FC = () => {
 
 
   const columns = [
-    { title: 'ID', dataIndex: 'id', key: 'id', width: 80 },
+    { title: 'ID', dataIndex: 'corpus_id', key: 'corpus_id', width: 80 },
     { title: '内容', dataIndex: 'content', key: 'content', render: (_: any, record: any) => (
         <div style={{ maxWidth: 420, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={record.content}>{record.content}</div>
       ) },
@@ -203,7 +199,10 @@ const EvalDataPage: React.FC = () => {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Input.Search placeholder="搜索内容 / 预期 / 意图" allowClear onSearch={(v) => { setSearchQuery(v); setCurrentPage(1); }} onChange={(e) => setSearchQuery(e.target.value)} style={{ width: 300 }} />
+          <Input.Search placeholder="搜索内容 / 预期 / 意图" allowClear onSearch={(v) => { setServerQuery(v || undefined); setCurrentPage(1); }} onChange={(e) => setSearchQuery(e.target.value)} style={{ width: 300 }} />
+          <Tooltip title={globalSearch ? '跨集搜索：已开启（在所有评测集中搜索）' : '跨集搜索：在当前评测集中搜索'}>
+            <Button type="text" icon={<GlobalOutlined />} onClick={() => { setGlobalSearch(!globalSearch); setCurrentPage(1); }} aria-label="跨集搜索切换" style={{ color: globalSearch ? '#1890ff' : undefined }} />
+          </Tooltip>
           <Space>
             <Button type="primary" onClick={openModal}>新增</Button>
           </Space>
@@ -213,11 +212,7 @@ const EvalDataPage: React.FC = () => {
 
       {error && <ErrorBanner message={error} onClose={() => setError(null)} />}
 
-      <Space style={{ marginBottom: 12 }}>
-        <Button type="primary" onClick={openModal}>新增</Button>
-      </Space>
-
-      <Card style={{ boxShadow: '0 4px 18px rgba(0,0,0,0.06)', borderRadius: 8 }} bodyStyle={{ padding: 12 }}>
+  <Card className="page-card-hover" style={{ boxShadow: '0 4px 18px rgba(0,0,0,0.06)', borderRadius: 8 }} bodyStyle={{ padding: 12 }}>
         <Table
           rowKey="id"
           dataSource={filteredData}

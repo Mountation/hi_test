@@ -3,6 +3,9 @@ from fastapi import FastAPI
 from api import eval_sets_api, eval_data_api, eval_results_api, config_api, jobs_api
 from utils.log import get_logger
 from fastapi.middleware.cors import CORSMiddleware
+import os
+import asyncio
+from services.cleanup_service import schedule_cleanup
 
 
 logger = get_logger("main")
@@ -40,6 +43,15 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def on_startup():
         logger.info("App startup event triggered.")
+        # optional cleanup scheduler
+        try:
+            if os.getenv('CLEANUP_ENABLED', '0') in ('1', 'true', 'True'):
+                interval = int(os.getenv('CLEANUP_INTERVAL_SECONDS', str(24 * 3600)))
+                # run scheduler in background
+                logger.info(f"Starting cleanup scheduler (interval_seconds={interval})")
+                asyncio.create_task(asyncio.to_thread(schedule_cleanup, interval))
+        except Exception as e:
+            logger.exception(f"Failed to start cleanup scheduler: {e}")
 
     @app.on_event("shutdown")
     async def on_shutdown():

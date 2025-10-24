@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
@@ -17,9 +17,8 @@ class EvalSet(EvalSetBase):
     created_at: datetime
     updated_at: datetime
     deleted: bool
-
-    class Config:
-        orm_mode = True
+    display_index: int = 0
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EvalSetUpdate(BaseModel):

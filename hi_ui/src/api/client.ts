@@ -29,7 +29,14 @@ export const api = {
   },
   // Query job status for async background tasks
   getJobStatus: (jobId: string) => request<{ job_id: string; status: string; processed?: number; total?: number; errors?: string[] }>(`/api/v1/jobs/${jobId}`),
-  listEvalData: (setId: number, page: number = 1, pageSize: number = 10) => request<{ items: import('../types').EvalData[]; total: number }>(`/api/v1/evalsets/${setId}/data?page=${page}&page_size=${pageSize}`),
+  listEvalData: (setId: number, page: number = 1, pageSize: number = 10, q?: string, global_search?: boolean) => {
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('page_size', String(pageSize));
+    if (q) params.set('q', q);
+    if (global_search) params.set('global_search', 'true');
+    return request<{ items: import('../types').EvalData[]; total: number }>(`/api/v1/evalsets/${setId}/data?${params.toString()}`);
+  },
   createEvalData: (setId: number, payload: { content: string; expected?: string; intent?: string }) => request(`/api/v1/evalsets/${setId}/data`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ eval_set_id: setId, ...payload }) }),
   deleteEvalData: (setId: number, dataId: number) => request<void>(`/api/v1/evalsets/${setId}/data/${dataId}`, { method: 'DELETE' }),
   patchEvalData: (setId: number, dataId: number, payload: { content?: string; expected?: string; intent?: string }) => request<import('../types').EvalData>(`/api/v1/evalsets/${setId}/data/${dataId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),

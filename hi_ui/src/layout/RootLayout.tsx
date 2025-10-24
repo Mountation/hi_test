@@ -9,7 +9,6 @@ const menuItems = [
   { key: '/', icon: <DashboardOutlined />, label: '仪表盘' },
   { key: '/sets', icon: <DatabaseOutlined />, label: '评测集' },
   { key: '/multi-execute', icon: <ThunderboltOutlined />, label: '多集合执行' },
-  { key: '/upload', icon: <UploadOutlined />, label: 'Excel导入' },
   { key: '/config', icon: <SettingOutlined />, label: '配置' },
 ];
 

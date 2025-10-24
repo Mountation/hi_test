@@ -1,6 +1,7 @@
 export interface EvalSet {
   id: number;
   name: string;
+  display_index?: number;
   count: number;
   created_at: string;
   updated_at: string;

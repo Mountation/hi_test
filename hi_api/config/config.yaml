@@ -4,3 +4,5 @@ scoring_base_url: "https://inner-apisix-test.hisense.com/histaragent-test/v1/cha
 scoring_api_key: "app-HQomYXN0PdyDjF7LQ5dDnojY"
 default_user_phone: "11111111111"
 default_hotline_phone: "43001"
+external_request_timeout_seconds: 60
+external_call_timeout_seconds: 120

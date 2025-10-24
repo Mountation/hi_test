@@ -7,7 +7,7 @@ from fastapi import Body
 from fastapi import Response
 from models.eval_set import EvalSetUpdate
 from fastapi import Path
-from fastapi import UploadFile, File
+from fastapi import UploadFile, File, Form
 import tempfile
 import openpyxl
 import uuid
@@ -55,10 +55,11 @@ def update_eval_set(id: int, payload: EvalSetUpdate = Body(...)):
 
 
 @router.post("/upload", summary="上传 Excel 导入评测数据")
-def upload_evalset_excel(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
+def upload_evalset_excel(file: UploadFile = File(...), name: str = Form(...), background_tasks: BackgroundTasks = None):
     try:
-        # 文件名（不含扩展名）视为评测集名称
-        name = file.filename.rsplit('.', 1)[0]
+        # 使用前端提交的评测集名称
+        if not name or not name.strip():
+            raise ValueError("评测集名称不能为空")
         # 保存上传文件到临时目录
         tmp_dir = tempfile.gettempdir()
         unique_name = f"upload_{uuid.uuid4().hex}_{file.filename}"

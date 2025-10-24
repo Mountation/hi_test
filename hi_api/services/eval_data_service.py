@@ -41,6 +41,36 @@ class EvalDataService:
             logger.info(f"list_by_eval_set: found {len(rows)} rows for set={eval_set_id}")
             return [EvalData.model_validate(r, from_attributes=True) for r in rows]
 
+    def list_by_eval_set_paginated(self, eval_set_id: int, page: int = 1, page_size: int = 10, q: str | None = None):
+        """Return (items, total) for the given eval_set_id. If q provided, perform server-side search across content/expected/intent."""
+        logger.info(f"list_by_eval_set_paginated called for set={eval_set_id} page={page} page_size={page_size} q={q}")
+        with SessionLocal() as session:
+            base_q = session.query(EvalDataORM).filter(EvalDataORM.eval_set_id == eval_set_id, EvalDataORM.deleted == False)
+            if q:
+                like = f"%{q}%"
+                base_q = base_q.filter(
+                    (EvalDataORM.content.like(like)) | (EvalDataORM.expected.like(like)) | (EvalDataORM.intent.like(like))
+                )
+            total = base_q.count()
+            items = base_q.order_by(EvalDataORM.id).offset((page - 1) * page_size).limit(page_size).all()
+            logger.info(f"list_by_eval_set_paginated: returning {len(items)}/{total} rows for set={eval_set_id} q={q}")
+            return [EvalData.model_validate(r, from_attributes=True) for r in items], total
+
+    def list_all_search_paginated(self, q: str | None = None, page: int = 1, page_size: int = 10):
+        """Search across all eval sets (non-deleted rows) with pagination."""
+        logger.info(f"list_all_search_paginated called page={page} page_size={page_size} q={q}")
+        with SessionLocal() as session:
+            base_q = session.query(EvalDataORM).filter(EvalDataORM.deleted == False)
+            if q:
+                like = f"%{q}%"
+                base_q = base_q.filter(
+                    (EvalDataORM.content.like(like)) | (EvalDataORM.expected.like(like)) | (EvalDataORM.intent.like(like))
+                )
+            total = base_q.count()
+            items = base_q.order_by(EvalDataORM.id).offset((page - 1) * page_size).limit(page_size).all()
+            logger.info(f"list_all_search_paginated: returning {len(items)}/{total} rows q={q}")
+            return [EvalData.model_validate(r, from_attributes=True) for r in items], total
+
     def get_eval_data(self, id: int) -> Optional[EvalData]:
         logger.info(f"get_eval_data called id={id}")
         with SessionLocal() as session:
@@ -59,15 +89,68 @@ class EvalDataService:
             if not r or r.deleted:
                 logger.warning(f"delete_eval_data: id={id} not found or already deleted")
                 return False
-            r.deleted = True
-            session.add(r)
-            session.commit()
+            # perform a transaction that:
+            # 1) mark the target row as deleted and set its corpus_id to -1
+            # 2) decrement corpus_id by 1 for all rows in the same eval_set with corpus_id > deleted_corpus
+            # 3) update eval_results.eval_data_id (which stores corpus_id) for same eval_set accordingly
+            deleted_corpus = r.corpus_id
+            eval_set_id = r.eval_set_id
             try:
-                eval_set_service.refresh_count(r.eval_set_id)
+                # mark deleted and set corpus_id to -1
+                r.deleted = True
+                r.corpus_id = -1
+                session.add(r)
+
+                if deleted_corpus is not None:
+                    # shift subsequent eval_data corpus_id values down by 1
+                    session.query(EvalDataORM).filter(
+                        EvalDataORM.eval_set_id == eval_set_id,
+                        EvalDataORM.deleted == False,
+                        EvalDataORM.corpus_id > deleted_corpus
+                    ).update({EvalDataORM.corpus_id: EvalDataORM.corpus_id - 1}, synchronize_session=False)
+
+                    # update eval_results entries that reference corpus_id (stored in eval_data_id)
+                    # do a raw SQL update via session.execute for broader compatibility
+                    try:
+                        session.execute(
+                            "UPDATE eval_results SET eval_data_id = eval_data_id - 1 WHERE eval_set_id = :esid AND eval_data_id > :dc",
+                            {"esid": eval_set_id, "dc": deleted_corpus}
+                        )
+                    except Exception:
+                        logger.warning(f"failed to update eval_results eval_data_id for set={eval_set_id}")
+
+                session.commit()
             except Exception as e:
-                logger.warning(f"refresh_count failed after delete for set={r.eval_set_id}: {e}")
-            logger.info(f"delete_eval_data: id={id} marked deleted")
+                session.rollback()
+                logger.exception(f"delete_eval_data transaction failed for id={id}: {e}")
+                return False
+
+            try:
+                eval_set_service.refresh_count(eval_set_id)
+            except Exception as e:
+                logger.warning(f"refresh_count failed after delete for set={eval_set_id}: {e}")
+
+            logger.info(f"delete_eval_data: id={id} marked deleted and corpus_id reassigned; shifted corpus ids for set={eval_set_id}")
             return True
+
+        def update_eval_data(self, id: int, content: Optional[str] = None, expected: Optional[str] = None, intent: Optional[str] = None) -> Optional[EvalData]:
+            logger.info(f"update_eval_data called id={id}")
+            with SessionLocal() as session:
+                r = session.get(EvalDataORM, id)
+                if not r or r.deleted:
+                    logger.warning(f"update_eval_data: id={id} not found or deleted")
+                    return None
+                if content is not None:
+                    r.content = content
+                if expected is not None:
+                    r.expected = expected
+                if intent is not None:
+                    r.intent = intent
+                session.add(r)
+                session.commit()
+                session.refresh(r)
+                logger.info(f"update_eval_data: id={id} updated")
+                return EvalData.model_validate(r, from_attributes=True)
 
 
 eval_data_service = EvalDataService()

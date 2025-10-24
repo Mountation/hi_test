@@ -73,16 +73,19 @@ EvalSet {
 
 ### Excel 上传导入评测数据
 - 方法：`POST /api/v1/evalsets/upload`
-- 表单：`file` (multipart/form-data, Excel 文件)
+- 表单（multipart/form-data）：
+  - `file`：Excel 文件（.xlsx/.xls）
+  - `name`：评测集名称（string，必填） — 用户需在上传时填写，后端不再以文件名为评测集名称。
 - Excel 约定：第一行表头忽略；后续行：第1列 `content`，第2列 `expected`，第3列 `intent`
-- 返回：
-```json
+- 返回（异步导入模式）：
+```
 {
-  "eval_set_id": 12,
-  "created": 58 // 导入成功的行数
+  "job_id": "<uuid>",
+  "eval_set_id": 12
 }
 ```
-- 错误：文件格式异常、空文件、解析错误时部分行跳过
+- 说明：后端会在后台处理导入任务，返回 `job_id` 后可通过 `GET /api/v1/jobs/{job_id}` 查询进度与结果；若后端未启用异步任务则仍可能返回导入统计信息。
+- 错误：文件格式异常、空文件或名称为空等会导致请求失败；部分行解析失败会被跳过并在后台记录。
 
 ---
 ## 2. 评测数据模块（EvalData）

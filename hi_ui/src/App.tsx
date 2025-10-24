@@ -7,7 +7,6 @@ import ResultsSetPage from './pages/ResultsSetPage'
 import ResultsDataPage from './pages/ResultsDataPage'
 import MultiExecutePage from './pages/MultiExecutePage'
 import ConfigPage from './pages/ConfigPage'
-import UploadExcelPage from './pages/UploadExcelPage'
 import RootLayout from './layout/RootLayout'
 
 export default function App() {
@@ -20,8 +19,7 @@ export default function App() {
         <Route path="/results/set/:id" element={<ResultsSetPage />} />
   <Route path="/results/data/:setId/:corpusId" element={<ResultsDataPage />} />
         <Route path="/multi-execute" element={<MultiExecutePage />} />
-        <Route path="/config" element={<ConfigPage />} />
-        <Route path="/upload" element={<UploadExcelPage />} />
+  <Route path="/config" element={<ConfigPage />} />
       </Routes>
     </RootLayout>
   )

@@ -18,6 +18,28 @@ logger = get_logger("eval_results_api")
 router = APIRouter(prefix="/api/v1/evalresults", tags=["evalresults"])
 
 
+async def _safe_score(answer: Optional[str], expected: Optional[str]) -> int:
+    """Run score_answer only after answer is available. Protect with timeout and return 0 on errors.
+
+    This centralizes timeout/error handling for scoring and guarantees scoring is invoked
+    after the AI client produced the final answer.
+    """
+    if answer is None:
+        logger.warning("_safe_score: answer is None, skipping scoring and returning 0")
+        return 0
+    loop = asyncio.get_running_loop()
+    timeout = getattr(settings, 'external_call_timeout_seconds', 60)
+    try:
+        # run blocking scoring in executor and protect with wait_for
+        return await asyncio.wait_for(loop.run_in_executor(None, lambda: score_answer(answer, expected)), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.error(f"scoring timed out after {timeout}s for answer_len={len(answer) if answer else 0}")
+        return 0
+    except Exception as e:
+        logger.exception(f"scoring failed with exception: {e}")
+        return 0
+
+
 @router.post("/", response_model=EvalResult)
 def create_eval_result(payload: EvalResultCreate):
     """创建评测结果"""
@@ -105,12 +127,8 @@ async def execute_eval(payload: ExecPayload):
         else:
             agent_version_value = str(agent_info)
 
-    # scoring may be blocking, run in executor and protect with timeout
-    try:
-        score = await loop.run_in_executor(None, lambda: score_answer(answer, expected))
-    except Exception as e:
-        logger.exception(f"scoring failed for eval_data_id={payload.eval_data_id}: {e}")
-        score = 0
+    # scoring runs only after answer is available; use helper to protect with timeout
+    score = await _safe_score(answer, expected)
 
     create_payload = EvalResultCreate(
         eval_set_id=eval_set_id,
@@ -201,8 +219,8 @@ async def batch_execute_eval_set(eval_set_id: int):
                     )
                 except asyncio.TimeoutError:
                     raise RuntimeError(f"item eval timed out after {timeout}s")
-                # run scoring in executor
-                score = await loop.run_in_executor(None, lambda: score_answer(answer, item.expected))
+                # scoring after answer is available, with timeout/error protection
+                score = await _safe_score(answer, item.expected)
                 create_payload = EvalResultCreate(
                     eval_set_id=item.eval_set_id,
                     # store corpus_id instead of global id
@@ -232,6 +250,128 @@ async def batch_execute_eval_set(eval_set_id: int):
         errors=errors,
         durations_ms=durations,
     )
+
+
+# New async job-based execution: start background job and return job_id for polling
+from db.models import Job as JobORM
+import uuid
+import threading
+
+
+def _background_run_eval_set(job_id: str, eval_set_id: int):
+    # run the same logic as batch_execute but update JobORM processed/total/status
+    with SessionLocal() as session:
+        job = session.query(JobORM).filter(JobORM.job_id == job_id).first()
+        data_items = eval_data_service.list_by_eval_set(eval_set_id)
+        total = len(data_items)
+        job.total = total
+        job.status = 'running'
+        job.processed = 0
+        session.add(job)
+        session.commit()
+
+        client = AIClient()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        agent_info = loop.run_in_executor(None, client.get_agent_info)
+        agent_version_value = None
+        try:
+            ai = loop.run_until_complete(agent_info)
+            if isinstance(ai, dict):
+                agent_version_value = ai.get('version') or ai.get('agent_version') or None
+                if agent_version_value is None:
+                    import json as _json
+                    agent_version_value = _json.dumps(ai, ensure_ascii=False)
+            else:
+                agent_version_value = str(ai)
+        except Exception:
+            agent_version_value = None
+
+        semaphore = asyncio.Semaphore(3)
+        result_ids = []
+        errors = []
+
+        async def process_item(item):
+            async with semaphore:
+                try:
+                    import time
+                    start = time.perf_counter()
+                    ans_task = asyncio.create_task(client.aget_answer(item.content))
+                    intent_task = asyncio.create_task(client.aget_intent(item.content))
+                    kdb_task = asyncio.create_task(client.ais_Kdb(item.content))
+                    timeout = getattr(settings, 'external_call_timeout_seconds', 60)
+                    try:
+                        answer, intent, kdb_flag = await asyncio.wait_for(
+                            asyncio.gather(ans_task, intent_task, kdb_task), timeout=timeout
+                        )
+                    except asyncio.TimeoutError:
+                        raise RuntimeError(f"item eval timed out after {timeout}s")
+                    score = await _safe_score(answer, item.expected)
+                    create_payload = EvalResultCreate(
+                        eval_set_id=item.eval_set_id,
+                        eval_data_id=item.corpus_id,
+                        actual_result=answer,
+                        actual_intent=intent,
+                        score=score,
+                        agent_version=agent_version_value,
+                        kdb=kdb_flag,
+                        exec_time=datetime.utcnow(),
+                    )
+                    res = eval_result_service.create_result(create_payload)
+                    result_ids.append(res.id)
+                    end = time.perf_counter()
+                    # update job processed count
+                    with SessionLocal() as s2:
+                        j2 = s2.query(JobORM).filter(JobORM.job_id == job_id).first()
+                        if j2:
+                            j2.processed = (j2.processed or 0) + 1
+                            s2.add(j2)
+                            s2.commit()
+                except Exception as e:
+                    logger.exception(f"background process_item failed eval_data_id={item.id}: {e}")
+                    errors.append(f"eval_data_id={item.id}: {e}")
+
+        # run the gather synchronously in this thread's event loop
+        try:
+            loop.run_until_complete(asyncio.gather(*[process_item(d) for d in data_items]))
+            # mark success
+            with SessionLocal() as s3:
+                j3 = s3.query(JobORM).filter(JobORM.job_id == job_id).first()
+                if j3:
+                    j3.status = 'success'
+                    j3.finished_at = datetime.utcnow()
+                    j3.processed = j3.total
+                    s3.add(j3)
+                    s3.commit()
+        except Exception as e:
+            with SessionLocal() as s4:
+                j4 = s4.query(JobORM).filter(JobORM.job_id == job_id).first()
+                if j4:
+                    j4.status = 'failed'
+                    j4.error = str(e)
+                    j4.finished_at = datetime.utcnow()
+                    s4.add(j4)
+                    s4.commit()
+        finally:
+            try:
+                loop.close()
+            except Exception:
+                pass
+
+
+@router.post('/execute/byset_async/{eval_set_id}')
+def batch_execute_eval_set_async(eval_set_id: int):
+    # create job record
+    job_uuid = str(uuid.uuid4())
+    with SessionLocal() as session:
+        job = JobORM(job_id=job_uuid, eval_set_id=eval_set_id, status='pending', processed=0, total=0)
+        session.add(job)
+        session.commit()
+
+    # start background thread
+    t = threading.Thread(target=_background_run_eval_set, args=(job_uuid, eval_set_id), daemon=True)
+    t.start()
+    return { 'job_id': job_uuid }
 
 
 @router.post("/execute/bysets", response_model=MultiSetExecResponse, summary="同时执行多个评测集")
@@ -277,7 +417,7 @@ async def batch_execute_multiple_sets(payload: MultiSetExecPayload):
                     )
                 except asyncio.TimeoutError:
                     raise RuntimeError(f"item eval timed out after {timeout}s")
-                score = await loop.run_in_executor(None, lambda: score_answer(answer, it.expected))
+                score = await _safe_score(answer, it.expected)
                 create_payload = EvalResultCreate(
                     eval_set_id=it.eval_set_id,
                     eval_data_id=it.corpus_id,
@@ -293,6 +433,7 @@ async def batch_execute_multiple_sets(payload: MultiSetExecPayload):
                 end = time.perf_counter()
                 durations.append((end - start) * 1000)
             except Exception as e:
+                logger.exception(f"run_set failed eval_set_id={sid} eval_data_id={it.id}: {e}")
                 errors.append(f"eval_set_id={sid} eval_data_id={it.id}: {e}")
         per_set_results.append(MultiSetExecSetResult(
             eval_set_id=sid,

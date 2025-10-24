@@ -12,6 +12,8 @@ class EvalSet(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     count = Column(Integer, default=0, nullable=False, comment='数量')
     deleted = Column(Boolean, default=False, nullable=False, comment='软删除标记')
+    # display_index 用于在 UI 中展示的顺序号（可递补），不要用作主键
+    display_index = Column(Integer, default=0, nullable=False, comment='展示顺序，用于前端显示/排序，可递补')
 
 
 class EvalData(Base):

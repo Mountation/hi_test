@@ -11,8 +11,8 @@ try:
     from config.settings import settings
 except Exception:
     class _Fallback:
-        agent_base_url = ''
-        agent_api_key = ''
+        scoring_base_url = ''
+        scoring_api_key = ''
     settings = _Fallback()
 
 logger = get_logger("scoring")
@@ -51,6 +51,8 @@ class AIEval:
         if not url:
             logger.error("AIEval.eval_ai: no scoring url configured")
             return None
+        import time
+        start_ts = time.perf_counter()
         try:
             logger.debug(f"AIEval.eval_ai posting to {url} output_len={len(output) if output else 0}")
             response = self.session.post(url, json=payload, headers=headers, stream=True, timeout=self.timeout)
@@ -68,16 +70,19 @@ class AIEval:
                 logger.debug(f"AIEval.eval_ai stream event={data.get('event')}")
                 if data.get('event') == 'agent_thought' and data.get('thought'):
                     final_result = data
-                    logger.info("AIEval.eval_ai received agent_thought")
+                    took_ms = int((time.perf_counter() - start_ts) * 1000)
+                    logger.info(f"AIEval.eval_ai received agent_thought took_ms={took_ms}")
                     break
+            took_ms = int((time.perf_counter() - start_ts) * 1000)
             if final_result:
                 thought = final_result.get('thought')
-                logger.info(f"AIEval.eval_ai returning thought_len={len(thought) if thought else 0}")
+                logger.info(f"AIEval.eval_ai returning thought_len={len(thought) if thought else 0} took_ms={took_ms}")
                 return thought
-            logger.info("AIEval.eval_ai finished without agent_thought")
+            logger.info(f"AIEval.eval_ai finished without agent_thought took_ms={took_ms}")
             return None
         except requests.exceptions.RequestException as e:
-            logger.error(f"AIEval.eval_ai request exception: {e}")
+            took_ms = int((time.perf_counter() - start_ts) * 1000)
+            logger.error(f"AIEval.eval_ai request exception ({type(e).__name__}) took_ms={took_ms}: {e}")
             return None
 
 

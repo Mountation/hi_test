@@ -12,5 +12,7 @@
 - `connectivity.md` — 前端与后端连通性问题（Failed to fetch）的排查与解决步骤。
 - `frontend_api_changes.md` — 前端 API 客户端 (`hi_ui/src/api/client.ts`) 的改动说明与类型修正。
 - `async_imports.md` — 基于后台任务的 Excel 异步导入实现与使用说明（jobs 表、job 状态查询、开发建表 helper 等）。
+- `2025-10-24-cleanup-and-display_index.md` — 定期清理服务与 `display_index` 新增的变更说明（2025-10-24）。
+ - `2025-10-24-frontend-optimizations.md` — 前端导入流程、进度显示与展示序号等优化（2025-10-24）。
 
 生成时间：2025-10-22

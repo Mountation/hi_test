@@ -17,8 +17,14 @@ class EvalSetService:
     def create_eval_set(self, payload: EvalSetCreate) -> EvalSet:
         logger.info(f"create_eval_set called: name={getattr(payload, 'name', None)}")
         with SessionLocal() as session:
-            # 创建评测集（初始 count 为 0）
-            obj = EvalSetORM(name=payload.name, count=0)
+            # 创建评测集（初始 count 为 0），并分配 display_index
+            # compute next display_index
+            try:
+                max_idx = session.query(EvalSetORM).with_entities(EvalSetORM.display_index).order_by(EvalSetORM.display_index.desc()).first()
+                next_idx = int(max_idx[0]) + 1 if (max_idx and max_idx[0] is not None) else 1
+            except Exception:
+                next_idx = 1
+            obj = EvalSetORM(name=payload.name, count=0, display_index=next_idx)
             session.add(obj)
             session.commit()
             session.refresh(obj)
@@ -57,14 +63,21 @@ class EvalSetService:
             if not obj:
                 logger.warning(f"delete_eval_set: eval_set id={eval_set_id} not found")
                 return False
-            # 标记评测集为删除
+            # 标记评测集为删除，并将 display_index 置为 -1，随后将后续的 display_index 依次前移
+            deleted_index = obj.display_index
             obj.deleted = True
             obj.count = 0
+            obj.display_index = -1
             session.add(obj)
             # 标记相关 eval_data 为删除
             session.query(EvalDataORM).filter(EvalDataORM.eval_set_id == eval_set_id).update({EvalDataORM.deleted: True})
+
+            # 如果原先有合法的 display_index，则把后续的 index 前移
+            if deleted_index and deleted_index > 0:
+                session.query(EvalSetORM).filter(EvalSetORM.display_index > deleted_index).update({EvalSetORM.display_index: EvalSetORM.display_index - 1}, synchronize_session=False)
+
             session.commit()
-            logger.info(f"delete_eval_set: eval_set id={eval_set_id} and related data marked deleted")
+            logger.info(f"delete_eval_set: eval_set id={eval_set_id} marked deleted and display_index shifted")
             return True
 
     def update_eval_set(self, eval_set_id: int, name: Optional[str] = None) -> Optional[EvalSet]:
@@ -86,7 +99,7 @@ class EvalSetService:
     def list_eval_sets(self) -> List[EvalSet]:
         logger.info("list_eval_sets called")
         with SessionLocal() as session:
-            rows = session.query(EvalSetORM).filter(EvalSetORM.deleted == False).all()
+            rows = session.query(EvalSetORM).filter(EvalSetORM.deleted == False).order_by(EvalSetORM.display_index).all()
             logger.info(f"list_eval_sets: found {len(rows)} sets")
             return [EvalSet.model_validate(r, from_attributes=True) for r in rows]
 

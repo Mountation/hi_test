@@ -12,6 +12,12 @@ class EvalResultService:
     def create_result(self, payload: EvalResultCreate) -> EvalResult:
         logger.info(f"create_result called for set={getattr(payload, 'eval_set_id', None)} data={getattr(payload, 'eval_data_id', None)}")
         with SessionLocal() as session:
+            try:
+                # attempt to log engine url if available for debugging
+                engine = getattr(session.bind, 'url', None)
+                logger.debug(f"DB engine url: {engine}")
+            except Exception:
+                logger.debug("DB engine url: unavailable")
             obj = EvalResultORM(eval_set_id=payload.eval_set_id,
                                 eval_data_id=payload.eval_data_id,
                                 actual_result=payload.actual_result,
@@ -26,6 +32,11 @@ class EvalResultService:
             session.commit()
             session.refresh(obj)
             logger.info(f"create_result: id={obj.id} set={obj.eval_set_id} data={obj.eval_data_id} score={obj.score}")
+            try:
+                cnt = session.query(EvalResultORM).count()
+                logger.debug(f"eval_results table row count after insert: {cnt}")
+            except Exception as e:
+                logger.debug(f"failed to count eval_results rows: {e}")
             return EvalResult.model_validate(obj, from_attributes=True)
 
     def list_by_eval_set(self, eval_set_id: int) -> List[EvalResult]:
